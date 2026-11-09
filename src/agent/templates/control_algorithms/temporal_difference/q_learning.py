@@ -66,34 +66,87 @@ class QLearning:
         self._value_functions_sum.append(self.action_values.sum())
 
     def run_episode(self) -> None:
-        """
-            TODO: Start an episode following the agent's policy until a terminal state (terminated) or timeout (truncated) is reached.
-            Resets the environment to get the initial state. Select actions based on an epsilon-greedy policy.
-            Update action values after each step. Let epsilon decay after each step.
-            At the end, append the total return of the episode to the returns list for plotting.
-        """
-        raise NotImplementedError()
+        # Reset the environment to the starting state
+        state = self.env.reset()
+
+        # Track the total reward earned during this episode
+        total_reward = 0.0
+
+        # Continue until the goal is reached or time runs out
+        done = False
+
+        while not done:
+
+            # Update the epsilon-greedy policy using current Q-values
+            self.policy = create_epsilon_soft_policy(
+                self.action_values, self.epsilon
+            )
+
+            # Select an action (exploration or exploitation)
+            action = self.policy.select_action(state)
+
+            # Execute the action in the environment
+            new_state, reward, terminated, truncated = self.env.step(action)
+
+            # Update the Q-table using the observed reward
+            self.update_action_value(
+                state, action, reward, new_state
+            )
+
+            # Accumulate rewards
+            total_reward += reward
+
+            # Reduce exploration over time
+            self.epsilon = max(
+                0.0, min(1.0, self.epsilon * self.epsilon_decay)
+            )
+
+            # Move to the next state
+            state = new_state
+
+            # Stop when the goal is reached or the episode times out
+            done = terminated or truncated
+
+        # Record episode results for plotting
+        print(f"Episode {self._total_episodes}: Reward = {total_reward:.2f}")
+        self._returns.append(total_reward)
+        self._total_episodes += 1
 
     def update_action_value(self, state, action, reward, new_state) -> None:
-        """
-            TODO: Update the action value function using the Q-Learning update rule.
-        """
-        raise NotImplementedError()
+        new_value = self.calculate_action_value(
+            state, action, reward, new_state
+        )
 
-    def calculate_action_value(self, s: State, a: Action, r: float, new_s: State) -> float:
-        """
-            TODO: Calculate the action value.
-        """
-        raise NotImplementedError()
+        self.action_values.update_value(
+            state, action, new_value
+        )
 
-    def q_learning_error(self, s: State, a: Action, r: float, new_s: State) -> float:
-        """
-            TODO: Calculate the Q-Learning-Error.
-        """
-        raise NotImplementedError()
+
+    def calculate_action_value(
+        self, s: State, a: Action, r: float, new_s: State
+    ) -> float:
+        old_q = self.action_values.get(s, a)
+        error = self.q_learning_error(s, a, r, new_s)
+
+        return old_q + self.step_size * error
+
+
+    def q_learning_error(
+        self, s: State, a: Action, r: float, new_s: State
+    ) -> float:
+        target = self.q_learning_target(r, new_s)
+        old_q = self.action_values.get(s, a)
+
+        return target - old_q
+
 
     def q_learning_target(self, reward: float, new_s: State) -> float:
-        """
-            TODO: Calculate Q-Learning-Target.
-        """
-        raise NotImplementedError()
+        if new_s.terminal:
+            return reward
+
+        best_future_q = max(
+            self.action_values.get(new_s, action)
+            for action in self.env.actions
+        )
+
+        return reward + self.discount_factor * best_future_q
